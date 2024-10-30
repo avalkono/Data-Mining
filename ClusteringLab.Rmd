@@ -1,0 +1,393 @@
+---
+title: "Clustering Lab"
+output: html_document
+date: "2024-10-10"
+---
+
+```{r setup, include=FALSE}
+library(datasets)
+library(arules)
+library(arulesViz)
+library(ggplot2)
+library(dplyr)
+library(rpart)
+library(rpart.plot)
+library(TH.data)
+library(ISLR2)
+library(lattice)
+library(stats)
+library(rattle)
+library(RColorBrewer)
+library(caret)
+library(ROCR)
+library(tidyverse)  
+library(cluster)  
+library(factoextra) 
+library(gridExtra)
+library(NbClust)
+library(dendextend)
+library(class)
+library(ClustOfVar)
+library(MASS)
+library(kableExtra)
+library(partykit)
+library(dbscan)
+library(AmesHousing)
+library(reticulate)
+```
+
+```{r}
+load("/Users/avakonopka/Downloads/TeenSNS4.RData")
+head(teens4)
+```
+
+
+
+```{r}
+summary(teens4)
+
+hist(teens4$age)
+hist(teens4$friends)
+hist(teens4$basketball)
+
+teens4$gender <- as.character(teens4$gender)
+teens4$gender[is.na(teens4$gender)] <- "missing"
+unique(teens4$gender)
+teens4$gender <- factor(teens4$gender, levels = c("M", "F", "missing"), labels = c(1, 2, 0))
+teens4$gender <- as.integer(teens4$gender)
+teens4
+```
+
+
+```{r}
+teen.scaled = teens4 %>% scale() %>% as.data.frame()
+teen.scaled
+```
+
+```{r}
+summary(teen.scaled)
+```
+
+
+```{r}
+pca_teen=prcomp(teen.scaled,scale=F) 
+pca_teen
+```
+
+```{r}
+pca_data <- pca_teen$x[, 1:2]  
+
+set.seed(123) 
+clus5 <- kmeans(pca_data, centers = 5, nstart = 25)
+clus5
+```
+
+```{r}
+fviz_cluster(clus5, data =teen.scaled)
+```
+
+```{r}
+fviz_nbclust(pca_data, kmeans, method = "wss",k.max = 10)
+```
+
+```{r}
+fviz_nbclust(pca_data, kmeans, method = "silhouette",k.max = 9)
+```
+
+```{r}
+set.seed(123)
+gap_stat = clusGap(pca_data, FUN = kmeans, nstart = 25, K.max = 9, B = 50)
+fviz_gap_stat(gap_stat)
+```
+
+```{r}
+scan1<-hdbscan(teen.scaled,minPts=4)
+scan1data=cbind.data.frame(pca_teen$x[,1],pca_teen$x[,2],as.factor(scan1$cluster+1))
+colnames(scan1data)=c("PCA1","PCA2","cluster")
+ggplot(scan1data,aes(x=PCA1,y=PCA2,color=cluster))+geom_point()+ scale_fill_brewer(palette = "Dark2")
+
+plot(scan1,show_flat=T)
+
+d=dist(teen.scaled,method = "canberra")
+res.dbscan=dbscan(d,eps=1.2,minPts=4)
+res.dbscan
+
+scan1data=cbind.data.frame(pca_ex$x[,1],pca_ex$x[,2],as.factor(res.dbscan$cluster+1))
+colnames(scan1data)=c("PCA1","PCA2","cluster")
+ggplot(scan1data,aes(x=PCA1,y=PCA2,color=cluster))+geom_point()+ scale_fill_brewer(palette = "Dark2")
+```
+
+
+
+```{r}
+set.seed(123) 
+clus7 <- kmeans(pca_data, centers = 7, nstart = 25)
+clus7
+
+fviz_cluster(clus7, data =teen.scaled)
+```
+
+```{r}
+teensplus <- lapply(teens4[ , sapply(teens4, is.numeric)], function(x) x + 1) %>% as.data.frame()
+teenslog = log(teensplus)
+
+teen.scaled.log = teenslog %>% scale() %>% as.data.frame()
+
+pca_log=prcomp(teen.scaled.log,scale=F) 
+
+pca_data_log <- pca_log$x[, 1:2]  
+
+set.seed(123) 
+clus5.log <- kmeans(pca_data_log, centers = , nstart = 25)
+clus5.log
+```
+
+```{r}
+fviz_nbclust(pca_data_log, kmeans, method = "wss",k.max = 10)
+```
+
+
+```{r}
+fviz_cluster(clus5.log, data =teen.scaled.log, geom = "point",       
+             show.clust.cent = TRUE, 
+             labelsize = 0)
+```
+
+```{r}
+summary(teen.scaled.log)
+```
+
+```{r}
+clus6.log <- kmeans(pca_data_log, centers = 6, nstart = 25)
+fviz_cluster(clus6.log, data =teen.scaled.log, geom = "point",       
+             show.clust.cent = TRUE, 
+             labelsize = 0)
+```
+
+
+
+```{r}
+profile.kmeans=cbind(teens4, clus5.log$cluster)
+#all.k=profile.kmeans %>% group_by(clus5.log$cluster) %>%
+   #summarise(mean.assault=mean(Assault),mean.murder=mean(Murder),mean.rape=mean(Rape),mean.pop=mean(UrbanPop))
+#all.k
+profile.kmeans %>% arrange(`clus5.log$cluster`)
+```
+
+```{r}
+summary_by_cluster <- aggregate(. ~ `clus5.log$cluster`, data = profile.kmeans, FUN = mean)
+print(summary_by_cluster)
+```
+```{r}
+summary_by_cluster <- profile.kmeans %>%
+  group_by(`clus5.log$cluster`) %>%
+  summarise(across(everything(), list(mean = ~ mean(.x, na.rm = TRUE), 
+                                       sd = ~ sd(.x, na.rm = TRUE)), 
+                   .names = "{.col}_{.fn}"))
+```
+
+```{r}
+profile.kmeans6=cbind(teens4, clus6.log$cluster)
+profile.kmeans5=cbind(profile.kmeans6, clus5.log$cluster)
+
+profile.kmeans6 %>% arrange(`clus6.log$cluster`)
+
+summary_by_cluster <- profile.kmeans6 %>%
+  group_by(`clus6.log$cluster`) %>%
+  summarise(across(everything(), list(mean = ~ mean(.x, na.rm = TRUE), 
+                                       sd = ~ sd(.x, na.rm = TRUE)), 
+                   .names = "{.col}_{.fn}"))
+summary_by_cluster
+```
+
+```{r}
+write_csv(profile.kmeans6, 'clustering.csv')
+```
+
+
+```{r}
+profile.kmeans5 %>% group_by(`clus6.log$cluster`) %>% summarise(across(everything(), list(mean = ~ mean(.x, na.rm = TRUE) 
+                                      ), 
+                   .names = "{.col}_{.fn}"))
+```
+
+```{r}
+data <- teens4 %>%
+  rowwise() %>%
+  summarise(
+            friends = sum(c(gender, friends,cheerleading, cute, sexy, hot, dance, dress, mall, shopping, clothes)),
+            sports1 = sum(c(basketball,football,softball,volleyball,baseball,sports)),
+            sports2 = sum(c(soccer,swimming,tennis)),
+            sex = sum(c(sex,kissed,hair,drunk,drugs)),
+            band = sum(c(band,marching)),
+            music = sum(c(music, rock)),
+            god = sum(c(church,jesus,bible)),
+            other = sum(c(blonde,die,death)),
+            brands = sum(c(hollister,abercrombie)))
+
+
+teensplus <- lapply(data[ , sapply(data, is.numeric)], function(x) x + 1) %>% as.data.frame()
+teenslog = log(teensplus)
+
+teen.scaled.log = teenslog %>% scale() %>% as.data.frame()
+
+pca_log=prcomp(teen.scaled.log,scale=F) 
+
+pca_data_log <- pca_log$x[, 1:2]  
+
+set.seed(123) 
+clus5.log <- kmeans(pca_data_log, centers = 5, nstart = 25)
+clus5.log
+
+fviz_cluster(clus5.log, data =teen.scaled.log, geom = "point",       
+             show.clust.cent = TRUE, 
+             labelsize = 0)
+
+clus6.log <- kmeans(pca_data_log, centers = 6, nstart = 25)
+
+fviz_cluster(clus6.log, data =teen.scaled.log, geom = "point",       
+             show.clust.cent = TRUE, 
+             labelsize = 0)
+
+clus7.log <- kmeans(pca_data_log, centers = 7, nstart = 25)
+
+fviz_cluster(clus7.log, data =teen.scaled.log, geom = "point",       
+             show.clust.cent = TRUE, 
+             labelsize = 0)
+
+```
+
+```{r}
+fviz_nbclust(pca_data_log, kmeans, method = "wss",k.max = 10)
+```
+
+
+```{r}
+profile.kmeans=cbind(data, clus5.log$cluster)
+
+profile.kmeans %>% arrange(`clus5.log$cluster`)
+
+summary_by_cluster <- profile.kmeans %>%
+  group_by(`clus5.log$cluster`) %>%
+  summarise(across(everything(), list(mean = ~ mean(.x, na.rm = TRUE), 
+                                       sum = ~ sum(.x, na.rm = TRUE)), 
+                   .names = "{.col}_{.fn}"))
+
+profile.kmeans %>%
+  group_by(`clus5.log$cluster`) %>%
+  dplyr::summarise(across(everything(), 
+                          list(
+                               prop = ~ sum(.x, na.rm = TRUE) / sum(profile.kmeans[[cur_column()]], na.rm = TRUE)), 
+                          .names = "{.col}_{.fn}"))
+
+
+  
+  
+```
+
+
+```{r}
+data <- teens4 %>%
+  rowwise() %>%
+  summarise(age = age,
+            friends = friends,
+            gender = gender,
+            sports = sum(c(basketball,football,softball,volleyball,baseball,sports, soccer,swimming,tennis, cheerleading)),
+            sex = sum(c(sex,kissed, sexy, cute, hot)),
+            party = sum(c(drunk,drugs)),
+            music = sum(c(music, rock, band, marching, dance)),
+            god = sum(c(church,jesus,bible)),
+            emo = sum(c(die,death)),
+            hair = sum(c(blonde, hair)),
+            brands = sum(c(hollister,abercrombie, dress, mall, shopping, clothes)))
+
+
+teensplus <- lapply(data[ , sapply(data, is.numeric)], function(x) x + 1) %>% as.data.frame()
+teenslog = log(teensplus)
+
+teen.scaled.log = teenslog %>% scale() %>% as.data.frame()
+
+pca_log=prcomp(teen.scaled.log,scale=F) 
+
+pca_data_log <- pca_log$x[, 1:2]  
+
+set.seed(123) 
+clus5.log <- kmeans(pca_data_log, centers = 5, nstart = 25)
+clus5.log
+
+fviz_cluster(clus5.log, data =teen.scaled.log, geom = "point",       
+             show.clust.cent = TRUE, 
+             labelsize = 0)
+
+clus6.log <- kmeans(pca_data_log, centers = 6, nstart = 25)
+
+fviz_cluster(clus6.log, data =teen.scaled.log, geom = "point",       
+             show.clust.cent = TRUE, 
+             labelsize = 0)
+
+clus7.log <- kmeans(pca_data_log, centers = 7, nstart = 25)
+
+fviz_cluster(clus7.log, data =teen.scaled.log, geom = "point",       
+             show.clust.cent = TRUE, 
+             labelsize = 0)
+
+clus4.log <- kmeans(pca_data_log, centers = 4, nstart = 25)
+
+fviz_cluster(clus4.log, data =teen.scaled.log, geom = "point",       
+             show.clust.cent = TRUE, 
+             labelsize = 0)
+```
+
+
+```{r}
+profile.kmeans=cbind(data, clus5.log$cluster)
+
+profile.kmeans %>%
+  group_by(`clus5.log$cluster`) %>%
+  dplyr::summarise(avg = mean(age),
+                   gender = median(gender),
+    across(everything(), 
+                          list(
+                               prop = ~ sum(.x, na.rm = TRUE) / sum(profile.kmeans[[cur_column()]], na.rm = TRUE)), 
+                          .names = "{.col}_{.fn}"))
+
+profile.kmeans=cbind(data, clus6.log$cluster)
+
+
+
+profile.kmeans %>%
+  group_by(`clus6.log$cluster`) %>%
+  dplyr::summarise(avg = mean(age),
+                   gender = median(gender),
+                   across(everything(), 
+                          list(
+                               prop = ~ sum(.x, na.rm = TRUE) / sum(profile.kmeans[[cur_column()]], na.rm = TRUE)), 
+                          .names = "{.col}_{.fn}"))
+
+profile.kmeans=cbind(data, clus4.log$cluster)
+
+
+profile.kmeans %>%
+  group_by(`clus4.log$cluster`) %>%
+  dplyr::summarise(avg = mean(age),
+                   gender = median(gender),
+                   across(everything(), 
+                          list(
+                               prop = ~ sum(.x, na.rm = TRUE) / sum(profile.kmeans[[cur_column()]], na.rm = TRUE)), 
+                          .names = "{.col}_{.fn}"))
+
+
+```
+
+```{r}
+clus5.log$tot.withinss
+clus5.log$betweenss/clus5.log$totss
+
+
+clus6.log$betweenss/clus6.log$totss
+
+
+clus4.log$betweenss/clus4.log$totss
+```
+
+
